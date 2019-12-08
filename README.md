@@ -6,10 +6,10 @@ The example starts a FreeRTOS task to convert in.wav to out.mp3.
 
 ## Testing
 
-The ESP32 is running at 240MHz. Use -Os while compiling.
+The ESP32 is running at 240MHz. Use "-O3 -ffast-math" while compiling.
 
 A simple benchmark shows:
-- Read WAV from SPIFFS, don't write to MP3, it takes 11s to convert a 10s mono WAV.
-- Read WAV from SPIFFS, and write to MP3, it takes 22s to convert a 10s mono WAV (and slower if run more than once).
+- Read WAV from SPIFFS, don't write to MP3, it takes 6s to convert a 10s mono WAV.
+- Read WAV from SPIFFS, and write to MP3, it takes 18s to convert a 10s mono WAV (and slower if run more than once).
 
 No significant diffence if we turn on the PSRAM，TICK=1000.

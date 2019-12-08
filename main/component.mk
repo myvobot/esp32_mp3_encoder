@@ -5,3 +5,4 @@
 
 COMPONENT_SRCDIRS += lib
 COMPONENT_ADD_INCLUDEDIRS += lib
+CFLAGS += -O3 -ffast-math

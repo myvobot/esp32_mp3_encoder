@@ -43,7 +43,11 @@ int verbose()
 /* Write out the MP3 file */
 int write_mp3(long bytes, void *buffer, void *config)
 {
+#if ENABLE_FILE_OUTPUT
   return fwrite(buffer, sizeof(unsigned char), bytes, outfile) / sizeof(unsigned char);
+#else
+  return bytes;
+#endif
 }
 
 /* Output error message and exit */
@@ -144,7 +148,11 @@ static void check_config(shine_config_t *config)
     demp_names[config->mpeg.emph],
     ((config->mpeg.original) ? "Original" : ""),
     ((config->mpeg.copyright) ? "(C)" : ""));
+#if ENABLE_FILE_OUTPUT
   printf("Encoding \"%s\" to \"%s\"\n", infname, outfname);
+#else
+  printf("Encoding \"%s\" to RAM\n", infname);
+#endif
 }
 
 int convert(int argc, char **argv)
