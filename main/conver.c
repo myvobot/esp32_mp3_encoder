@@ -214,21 +214,16 @@ int convert(int argc, char **argv)
   /* All the magic happens here */
   while (wave_get(buffer, &wave, samples_per_pass)) {
     data = shine_encode_buffer_interleaved(s, buffer, &written);
-    // fprintf(stdout, "len=%d\n", written);
-    /*
     if ( write_mp3(written, data, &config) != written )
     {
        fprintf(stderr, "shineenc: write error\n");
        return 1;
     }
-    */
   }
 
   /* Flush and write remaining data. */
   data = shine_flush(s, &written);
-  /*
   write_mp3(written, data, &config);
-  */
 
   /* Close encoder. */
   shine_close(s);
