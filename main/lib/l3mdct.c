@@ -90,6 +90,7 @@ void shine_mdct_sub(shine_global_config *config, int stride)
          * 36 coefficients in the time domain and 18 in the frequency
          * domain.
          */
+
         for(k=18; k--; )
         {
 		  int32_t vm;
@@ -114,6 +115,7 @@ void shine_mdct_sub(shine_global_config *config, int stride)
         }
 
         /* Perform aliasing reduction butterfly */
+        asm ("#cmuls:");
         if (band != 0)
         {
           cmuls(mdct_enc[band][0], mdct_enc[band-1][17-0], mdct_enc[band][0], mdct_enc[band-1][17-0], MDCT_CS0, MDCT_CA0);

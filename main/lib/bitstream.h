@@ -17,8 +17,8 @@ typedef struct  bit_stream_struc {
 
 #define         BUFFER_SIZE     4096
 
-#define         MIN(A, B)       ((A) < (B) ? (A) : (B))
-#define         MAX(A, B)       ((A) > (B) ? (A) : (B))
+//#define         MIN(A, B)       ((A) < (B) ? (A) : (B))
+//#define         MAX(A, B)       ((A) > (B) ? (A) : (B))
 
 void shine_open_bit_stream(bitstream_t *bs,const int size);
 void shine_close_bit_stream(bitstream_t *bs);

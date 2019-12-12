@@ -1,4 +1,4 @@
-/* l3loop.c */
+/* l3loop->c */
 
 #include "types.h"
 #include "tables.h"
@@ -27,8 +27,41 @@ static void bigv_tab_select( int ix[GRANULE_SIZE], gr_info *cod_info );
 static void subdivide(gr_info *cod_info, shine_global_config *config );
 static int count1_bitcount( int ix[ GRANULE_SIZE ], gr_info *cod_info );
 static void calc_runlen( int ix[GRANULE_SIZE], gr_info *cod_info );
-static void calc_xmin(shine_psy_ratio_t *ratio, gr_info *cod_info, shine_psy_xmin_t *l3_xmin, int gr, int ch );
+static void calc_xmin( gr_info *cod_info, shine_psy_xmin_t *l3_xmin, int gr, int ch );
 static int quantize(int ix[GRANULE_SIZE], int stepsize, shine_global_config *config);
+
+#if 0
+int32_t sqrt_int(int32_t r)
+{
+    float x = 0;
+    float rr = r;
+    float y = rr*0.5;
+    *(unsigned int*)&x = (0xbe6f0000 - *(uint32_t*)&rr) >> 1;
+
+    x = (1.5f*x) - (x*x)*(x*y);
+    if(r>101123) x = (1.5f*x) - (x*x)*(x*y);
+
+    int32_t is = (int32_t)(x*rr + 0.5f);
+    return is + ((r - is*is)>>31);
+}
+
+#define SQRT_MAGIC_F 0x5f3759df 
+
+float  f_sqrt(const float x)
+{
+  const float xhalf = 0.5f*x;
+  //float step;
+  union // get bits for floating value
+  {
+    float x;
+    int i;
+  } u;
+  u.x = x;
+  u.i = SQRT_MAGIC_F - (u.i >> 1);  // gives initial guess y0
+  
+  return x*u.x*(1.5f - xhalf*u.x*u.x);// Newton step, repeating increases accuracy 
+}
+#endif
 
 /*
  * shine_inner_loop:
@@ -97,6 +130,7 @@ void shine_iteration_loop(shine_global_config *config)
   int max_bits;
   int ch, gr, i;
   int *ix;
+  
 
   for(ch=config->wave.channels; ch--; )
   {
@@ -104,23 +138,23 @@ void shine_iteration_loop(shine_global_config *config)
     {
       /* setup pointers */
       ix = config->l3_enc[ch][gr];
-      config->l3loop.xr = config->mdct_freq[ch][gr];
+      config->l3loop->xr = config->mdct_freq[ch][gr];
 
       /* Precalculate the square, abs,  and maximum,
        * for use later on.
        */
-      for (i=GRANULE_SIZE, config->l3loop.xrmax=0; i--;)
+      for (i=GRANULE_SIZE, config->l3loop->xrmax=0; i--;)
       {
-        config->l3loop.xrsq[i]  = mulsr(config->l3loop.xr[i],config->l3loop.xr[i]);
-        config->l3loop.xrabs[i] = labs(config->l3loop.xr[i]);
-        if(config->l3loop.xrabs[i]>config->l3loop.xrmax)
-          config->l3loop.xrmax=config->l3loop.xrabs[i];
+        config->l3loop->xrsq[i]  = mulsr(config->l3loop->xr[i],config->l3loop->xr[i]);
+        config->l3loop->xrabs[i] = abs(config->l3loop->xr[i]);
+        if(config->l3loop->xrabs[i]>config->l3loop->xrmax)
+          config->l3loop->xrmax=config->l3loop->xrabs[i];
       }
 
       cod_info = (gr_info *) &(config->side_info.gr[gr].ch[ch]);
       cod_info->sfb_lmax = SFB_LMAX - 1; /* gr_deco */
 
-      calc_xmin(&config->ratio, cod_info, &l3_xmin, gr, ch );
+      calc_xmin(cod_info, &l3_xmin, gr, ch );
 
       if ( config->mpeg.version == MPEG_I )
         calc_scfsi(&l3_xmin,ch,gr,config);
@@ -150,7 +184,7 @@ void shine_iteration_loop(shine_global_config *config)
       cod_info->count1table_select= 0;
 
       /* all spectral values zero ? */
-      if(config->l3loop.xrmax)
+      if(config->l3loop->xrmax)
         cod_info->part2_3_length = shine_outer_loop(max_bits,&l3_xmin,ix,
                                               gr,ch,config);
 
@@ -184,25 +218,25 @@ void calc_scfsi( shine_psy_xmin_t *l3_xmin, int ch, int gr,
 
   const int *scalefac_band_long = &shine_scale_fact_band_index[config->mpeg.samplerate_index][0];
 
-  /* note. it goes quite a bit faster if you uncomment the next bit and exit
-     early from scfsi, but you then loose the advantage of common scale factors.
+  // note. it goes quite a bit faster if you uncomment the next bit and exit
+   //  early from scfsi, but you then loose the advantage of common scale factors.
 
-  for(scfsi_band=0;scfsi_band<4;scfsi_band++)
+  /*for(scfsi_band=0;scfsi_band<4;scfsi_band++)
     l3_side->scfsi[ch][scfsi_band] = 0;
-  return;
+  return;*/
 
-  */
+  
 
-  config->l3loop.xrmaxl[gr] = config->l3loop.xrmax;
+  config->l3loop->xrmaxl[gr] = config->l3loop->xrmax;
   scfsi_set = 0;
 
   /* the total energy of the granule */
   for ( temp = 0, i =GRANULE_SIZE; i--;  )
-    temp += config->l3loop.xrsq[i]>>10; /* a bit of scaling to avoid overflow, (not very good) */
+    temp += config->l3loop->xrsq[i]>>10; /* a bit of scaling to avoid overflow, (not very good) */
   if ( temp )
-    config->l3loop.en_tot[gr] = log((double)temp * 4.768371584e-7) / LN2; /* 1024 / 0x7fffffff */
+    config->l3loop->en_tot[gr] = log((float)temp * 4.768371584e-7) / LN2; /* 1024 / 0x7fffffff */
   else
-    config->l3loop.en_tot[gr] = 0;
+    config->l3loop->en_tot[gr] = 0;
 
   /* the energy of each scalefactor band, en */
   /* the allowed distortion of each scalefactor band, xm */
@@ -213,16 +247,16 @@ void calc_scfsi( shine_psy_xmin_t *l3_xmin, int ch, int gr,
     end   = scalefac_band_long[ sfb+1 ];
 
     for ( temp = 0, i = start; i < end; i++ )
-      temp += config->l3loop.xrsq[i]>>10;
+      temp += config->l3loop->xrsq[i]>>10;
     if ( temp )
-      config->l3loop.en[gr][sfb] = log((double)temp * 4.768371584e-7) / LN2; /* 1024 / 0x7fffffff */
+      config->l3loop->en[gr][sfb] = log((float)temp * 4.768371584e-7) / LN2; /* 1024 / 0x7fffffff */
     else
-      config->l3loop.en[gr][sfb] = 0;
+      config->l3loop->en[gr][sfb] = 0;
 
     if ( l3_xmin->l[gr][ch][sfb])
-      config->l3loop.xm[gr][sfb] = log( l3_xmin->l[gr][ch][sfb] ) / LN2;
+      config->l3loop->xm[gr][sfb] = log( l3_xmin->l[gr][ch][sfb] ) / LN2;
     else
-      config->l3loop.xm[gr][sfb] = 0;
+      config->l3loop->xm[gr][sfb] = 0;
   }
 
   if(gr==1)
@@ -232,15 +266,15 @@ void calc_scfsi( shine_psy_xmin_t *l3_xmin, int ch, int gr,
     for(gr2=2; gr2--; )
     {
       /* The spectral values are not all zero */
-      if(config->l3loop.xrmaxl[gr2])
+      if(config->l3loop->xrmaxl[gr2])
         condition++;
 
       condition++;
     }
-    if(abs(config->l3loop.en_tot[0]-config->l3loop.en_tot[1]) < en_tot_krit)
+    if(abs(config->l3loop->en_tot[0]-config->l3loop->en_tot[1]) < en_tot_krit)
       condition++;
     for(tp=0,sfb=21; sfb--; )
-      tp += abs(config->l3loop.en[0][sfb]-config->l3loop.en[1][sfb]);
+      tp += abs(config->l3loop->en[0][sfb]-config->l3loop->en[1][sfb]);
     if (tp < en_dif_krit)
       condition++;
 
@@ -254,8 +288,8 @@ void calc_scfsi( shine_psy_xmin_t *l3_xmin, int ch, int gr,
         end   = scfsi_band_long[scfsi_band+1];
         for ( sfb = start; sfb < end; sfb++ )
         {
-          sum0 += abs( config->l3loop.en[0][sfb] - config->l3loop.en[1][sfb] );
-          sum1 += abs( config->l3loop.xm[0][sfb] - config->l3loop.xm[1][sfb] );
+          sum0 += abs( config->l3loop->en[0][sfb] - config->l3loop->en[1][sfb] );
+          sum1 += abs( config->l3loop->xm[0][sfb] - config->l3loop->xm[1][sfb] );
         }
 
         if(sum0<en_scfsi_band_krit && sum1<xm_scfsi_band_krit)
@@ -312,8 +346,7 @@ int part2_length(int gr, int ch, shine_global_config *config)
  * as determined by the psychoacoustic model.
  * xmin(sb) = ratio(sb) * en(sb) / bw(sb)
  */
-void calc_xmin(shine_psy_ratio_t *ratio,
-               gr_info *cod_info,
+void calc_xmin(gr_info *cod_info,
                shine_psy_xmin_t *l3_xmin,
                int gr, int ch )
 {
@@ -321,17 +354,17 @@ void calc_xmin(shine_psy_ratio_t *ratio,
 
   for ( sfb = cod_info->sfb_lmax; sfb--; )
   {
-/*  note. xmin will always be zero with no psychoacoustic model
+  /*note. xmin will always be zero with no psychoacoustic model
 
     start = scalefac_band_long[ sfb ];
     end   = scalefac_band_long[ sfb+1 ];
     bw = end - start;
 
     for ( en = 0, l = start; l < end; l++ )
-      en += config->l3loop.xrsq[l];
+      en += config->l3loop->xrsq[l];
 
-    l3_xmin->l[gr][ch][sfb] = ratio->l[gr][ch][sfb] * en / bw;
-*/
+    l3_xmin->l[gr][ch][sfb] = ratio->l[gr][ch][sfb] * en / bw;*/
+
     l3_xmin->l[gr][ch][sfb] = 0;
   }
 }
@@ -352,22 +385,22 @@ void shine_loop_initialise(shine_global_config *config)
    */
   for(i=128; i--;)
   {
-    config->l3loop.steptab[i] = pow(2.0,(double)(127-i)/4);
-    if((config->l3loop.steptab[i]*2)>0x7fffffff) /* MAXINT = 2**31 = 2**(124/4) */
-      config->l3loop.steptabi[i]=0x7fffffff;
+    config->l3loop->steptab[i] = pow(2.0,(double)(127-i)/4);
+    if((config->l3loop->steptab[i]*2)>0x7fffffff) /* MAXINT = 2**31 = 2**(124/4) */
+      config->l3loop->steptabi[i]=0x7fffffff;
     else
       /* The table is multiplied by 2 to give an extra bit of accuracy.
        * In quantize, the long multiply does not shift it's result left one
        * bit to compensate.
        */
-      config->l3loop.steptabi[i] = (int32_t)((config->l3loop.steptab[i]*2) + 0.5);
+      config->l3loop->steptabi[i] = (int32_t)((config->l3loop->steptab[i]*2) + 0.5);
   }
 
   /* quantize: vector conversion, three quarter power table.
    * The 0.5 is for rounding, the .0946 comes from the spec.
    */
   for(i=10000; i--;)
-    config->l3loop.int2idx[i] = (int)(sqrt(sqrt((double)i)*(double)i) - 0.0946 + 0.5);
+    config->l3loop->int2idx[i] = (int)(sqrt(sqrt((double)i)*(double)i) - 0.0946 + 0.5);
 }
 
 /*
@@ -380,13 +413,13 @@ int quantize(int ix[GRANULE_SIZE], int stepsize, shine_global_config *config )
 {
   int i, max, ln;
   int32_t scalei;
-  double scale, dbl;
+  float scale, dbl;
 
-  scalei = config->l3loop.steptabi[stepsize+127]; /* 2**(-stepsize/4) */
+  scalei = config->l3loop->steptabi[stepsize+127]; /* 2**(-stepsize/4) */
 
   /* a quick check to see if ixmax will be less than 8192 */
   /* this speeds up the early calls to bin_search_StepSize */
-  if((mulr(config->l3loop.xrmax,scalei)) > 165140) /* 8192**(4/3) */
+  if((mulr(config->l3loop->xrmax,scalei)) > 165140) /* 8192**(4/3) */
     max = 16384; /* no point in continuing, stepsize not big enough */
   else
     for(i=0, max=0;i<GRANULE_SIZE;i++)
@@ -394,15 +427,16 @@ int quantize(int ix[GRANULE_SIZE], int stepsize, shine_global_config *config )
       /* This calculation is very sensitive. The multiply must round it's
        * result or bad things happen to the quality.
        */
-      ln = mulr(labs(config->l3loop.xr[i]),scalei);
+      ln = mulr(abs(config->l3loop->xr[i]),scalei);
 
       if(ln<10000) /* ln < 10000 catches most values */
-        ix[i] = config->l3loop.int2idx[ln]; /* quick look up method */
+        ix[i] = config->l3loop->int2idx[ln]; /* quick look up method */
       else
       {
         /* outside table range so have to do it using floats */
-        scale = config->l3loop.steptab[stepsize+127]; /* 2**(-stepsize/4) */
-        dbl = ((double)config->l3loop.xrabs[i]) * scale * 4.656612875e-10; /* 0x7fffffff */
+        scale = config->l3loop->steptab[stepsize+127]; /* 2**(-stepsize/4) */
+        dbl = ((float)config->l3loop->xrabs[i]) * scale * 4.656612875e-10; /* 0x7fffffff */
+        //ix[i] = sqrt_int((int)(f_sqrt(dbl)*dbl)); /* dbl**(3/4) */
         ix[i] = (int)sqrt(sqrt(dbl)*dbl); /* dbl**(3/4) */
       }
 

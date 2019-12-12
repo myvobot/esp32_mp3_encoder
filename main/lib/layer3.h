@@ -32,7 +32,7 @@ enum modes {
   STEREO       = 0,
   JOINT_STEREO = 1,
   DUAL_CHANNEL = 2,
-  MONO         = 3 
+  MONO         = 3
 };
 
 enum emph {
@@ -128,6 +128,8 @@ shine_t shine_initialise(shine_config_t *config);
 
 /* Maximun possible value for the function below. */
 #define SHINE_MAX_SAMPLES 1152
+
+uint32_t *shine_get_counters();
 
 /* Returns audio samples expected in each frame. */
 int shine_samples_per_pass(shine_t s);

@@ -57,7 +57,7 @@
 #endif
 
 typedef struct {
-    int16_t channels;
+    int channels;
     int samplerate;
 } priv_shine_wave_t;
 
@@ -85,8 +85,8 @@ typedef struct {
 
 typedef struct {
   int32_t *xr;                    /* magnitudes of the spectral values */
-  int32_t *xrsq;     /* xr squared */
-  int32_t *xrabs;    /* xr absolute */
+  int32_t xrsq[GRANULE_SIZE];     /* xr squared */
+  int32_t xrabs[GRANULE_SIZE];    /* xr absolute */
   int32_t xrmax;                  /* maximum of xrabs array */
   int32_t en_tot[MAX_GRANULES];   /* gr */
   int32_t en[MAX_GRANULES][21];
@@ -94,7 +94,7 @@ typedef struct {
   int32_t xrmaxl[MAX_GRANULES];
   double steptab[128]; /* 2**(-x/4)  for x = -127..0 */
   int32_t steptabi[128];  /* 2**(-x/4)  for x = -127..0 */
-  int16_t int2idx[10000]; /* x**(3/4)   for x = 0..9999 */
+  int int2idx[10000]; /* x**(3/4)   for x = 0..9999 */
 } l3loop_t;
 
 typedef struct {
@@ -141,7 +141,7 @@ typedef struct {
 } shine_side_info_t;
 
 typedef struct {
-    float  l[MAX_GRANULES][MAX_CHANNELS][21];
+    double  l[MAX_GRANULES][MAX_CHANNELS][21];
 } shine_psy_ratio_t;
 
 typedef struct {
@@ -154,23 +154,23 @@ typedef struct {
 } shine_scalefac_t;
 
 
-typedef struct shine_global_flags {
+typedef struct shine_global_flags { 
   priv_shine_wave_t    wave;
   priv_shine_mpeg_t    mpeg;
   bitstream_t    bs;
   shine_side_info_t side_info;
   int            sideinfo_len;
   int            mean_bits;
-  //shine_psy_ratio_t ratio;
+  shine_psy_ratio_t ratio;
   shine_scalefac_t  scalefactor;
   int16_t       *buffer[MAX_CHANNELS];
-  double          pe[MAX_CHANNELS][MAX_GRANULES];
-  int            *l3_enc[MAX_CHANNELS][MAX_GRANULES]; //4% reduction in performance IRAM
+  double         pe[MAX_CHANNELS][MAX_GRANULES];
+  int            l3_enc[MAX_CHANNELS][MAX_GRANULES][GRANULE_SIZE];
   int32_t        l3_sb_sample[MAX_CHANNELS][MAX_GRANULES+1][18][SBLIMIT];
-  int32_t        *mdct_freq[MAX_CHANNELS][MAX_GRANULES]; //1% reduction in perormance IRAM
+  int32_t        mdct_freq[MAX_CHANNELS][MAX_GRANULES][GRANULE_SIZE];
   int            ResvSize;
   int            ResvMax;
-  l3loop_t       *l3loop;
+  l3loop_t       l3loop;
   mdct_t         mdct;
   subband_t      subband;
 } shine_global_config;

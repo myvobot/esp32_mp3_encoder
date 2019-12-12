@@ -8,6 +8,18 @@
 #include "l3loop.h"
 #include "bitstream.h"
 #include "l3bitstream.h"
+#include "esp_heap_caps.h"
+#include "esp_system.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "freertos/queue.h"
+
+static QueueHandle_t   core0_tasks_q = NULL;
+static QueueHandle_t   core1_tasks_q = NULL;
+static QueueHandle_t   processed_mp3_buffer_q = NULL;
+
+
+static uint32_t counter[5] = {0};
 
 static int granules_per_frame[4] = {
     1,  /* MPEG 2.5 */
@@ -83,13 +95,41 @@ shine_global_config *shine_initialise(shine_config_t *pub_config)
 {
   double avg_slots_per_frame;
   shine_global_config *config;
-
+  int x, y;
   if (shine_check_config(pub_config->wave.samplerate, pub_config->mpeg.bitr) < 0)
     return NULL;
 
-  config = calloc(1,sizeof(shine_global_config));
+  config = heap_caps_malloc(sizeof(shine_global_config), MALLOC_CAP_8BIT);
   if (config == NULL)
     return config;
+  printf("config size: %d @%p\n", sizeof(shine_global_config), config);
+  printf("l3_enc & mdct_freq each: %d\n", sizeof(int32_t)*GRANULE_SIZE*MAX_GRANULES*MAX_CHANNELS);
+  for (x = 0; x < MAX_CHANNELS; x++) {
+      for (y = 0; y < MAX_GRANULES; y++) {
+        // 2 * 2 * 576 each
+        config->l3_enc[x][y] = heap_caps_malloc(sizeof(int32_t)*GRANULE_SIZE, MALLOC_CAP_32BIT); //Significant performance hit in IRAM
+        config->mdct_freq[x][y] = heap_caps_malloc(sizeof(int32_t)*GRANULE_SIZE, MALLOC_CAP_32BIT); //OK 1%
+      }
+  }
+  printf("l3loop struct: %d\n", sizeof(l3loop_t));
+  config->l3loop = heap_caps_malloc(sizeof(l3loop_t), MALLOC_CAP_8BIT);
+  printf("xrsq & xrabs each: %d\n", sizeof(int32_t)*GRANULE_SIZE);
+  config->l3loop->xrsq = heap_caps_malloc(sizeof(int32_t)*GRANULE_SIZE, MALLOC_CAP_32BIT); //OK 0.5%
+  config->l3loop->xrabs = heap_caps_malloc(sizeof(int32_t)*GRANULE_SIZE, MALLOC_CAP_32BIT); //OK 0.5%
+
+/*typedef struct {
+  int32_t *xr;
+  int32_t *xrsq[GRANULE_SIZE];
+  int32_t *xrabs[GRANULE_SIZE];
+  int32_t xrmax;
+  int32_t en_tot[MAX_GRANULES];
+  int32_t en[MAX_GRANULES][21];
+  int32_t xm[MAX_GRANULES][21];
+  int32_t xrmaxl[MAX_GRANULES];
+  double steptab[128];
+  int32_t steptabi[128];
+  int16_t int2idx[10000];
+} l3loop_t;*/
 
   shine_subband_initialise(config);
   shine_mdct_initialise(config);
@@ -97,12 +137,12 @@ shine_global_config *shine_initialise(shine_config_t *pub_config)
 
   /* Copy public config. */
   config->wave.channels   = pub_config->wave.channels;
-  config->wave.samplerate = pub_config->wave.samplerate; 
-  config->mpeg.mode       = pub_config->mpeg.mode;     
-  config->mpeg.bitr       = pub_config->mpeg.bitr; 
-  config->mpeg.emph       = pub_config->mpeg.emph; 
-  config->mpeg.copyright  = pub_config->mpeg.copyright;  
-  config->mpeg.original   = pub_config->mpeg.original; 
+  config->wave.samplerate = pub_config->wave.samplerate;
+  config->mpeg.mode       = pub_config->mpeg.mode;
+  config->mpeg.bitr       = pub_config->mpeg.bitr;
+  config->mpeg.emph       = pub_config->mpeg.emph;
+  config->mpeg.copyright  = pub_config->mpeg.copyright;
+  config->mpeg.original   = pub_config->mpeg.original;
 
   /* Set default values. */
   config->ResvMax             = 0;
@@ -145,8 +185,33 @@ shine_global_config *shine_initialise(shine_config_t *pub_config)
   return config;
 }
 
+
+
+uint32_t *shine_get_counters()
+
+{
+
+  return counter;
+
+}
+
+/* Counter results
+Counters 1550541561 : 1550541629 : 1553135798 : 1555116724 : 1555309952
+68
+core 1 will do:
+2594169
+core 0 will do:
+1980926
+193228
+
+
+Counters 2664123380 : 2664123448 : 2666717886 : 2668665908 : 2668859025
+*/
+
+
 static unsigned char *shine_encode_buffer_internal(shine_global_config *config, int *written, int stride)
 {
+  counter[0] = xthal_get_ccount();
   if(config->mpeg.frac_slots_per_frame)
   {
     config->mpeg.padding   = (config->mpeg.slot_lag <= (config->mpeg.frac_slots_per_frame - 1.0));
@@ -155,16 +220,18 @@ static unsigned char *shine_encode_buffer_internal(shine_global_config *config, 
 
   config->mpeg.bits_per_frame = 8*(config->mpeg.whole_slots_per_frame + config->mpeg.padding);
   config->mean_bits = (config->mpeg.bits_per_frame - config->sideinfo_len)/config->mpeg.granules_per_frame;
-
+  counter[1] = xthal_get_ccount();
   /* apply mdct to the polyphase output */
+  // put on core 1
   shine_mdct_sub(config, stride);
-
+  counter[2] = xthal_get_ccount();
   /* bit and noise allocation */
+  //put on core 0
   shine_iteration_loop(config);
-
+  counter[3] = xthal_get_ccount();
   /* write the frame to the bitstream */
   shine_format_bitstream(config);
-
+  counter[4] = xthal_get_ccount();
   /* Return data. */
   *written = config->bs.data_position;
   config->bs.data_position = 0;
