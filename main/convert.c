@@ -44,6 +44,7 @@ int verbose()
 int write_mp3(long bytes, void *buffer, void *config)
 {
 #if ENABLE_FILE_OUTPUT
+  printf("writting %ld\n", bytes);
   return fwrite(buffer, sizeof(unsigned char), bytes, outfile) / sizeof(unsigned char);
 #else
   return bytes;
@@ -208,6 +209,8 @@ int convert(int argc, char **argv)
     config.mpeg.mode = stereo;
   else
     config.mpeg.mode = MONO;
+
+  config.mpeg.bitr = 64;
 
   /* Initiate encoder */
   s = shine_initialise(&config);

@@ -249,6 +249,7 @@ int read_samples(int16_t *sample_buffer, int frame_size, FILE *file)
     samples_read = frame_size;
   }
 
+  printf("samples_read=%d ", samples_read);
   return samples_read;
 }
 
